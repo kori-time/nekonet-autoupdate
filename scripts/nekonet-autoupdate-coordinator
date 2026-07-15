@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ENV_FILE="/etc/nekonet-autoupdate.env"
+STATE_DIR="/var/lib/nekonet-autoupdate"
+WORKER="/usr/local/lib/nekonet-autoupdate/remote-worker.sh"
+LOCK_FILE="/run/nekonet-autoupdate-coordinator.lock"
+
+mkdir -p "$STATE_DIR"
+[[ -r "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+
+SSH_USER="${SSH_USER:-root}"
+SSH_PORT="${SSH_PORT:-2222}"
+SSH_KEY="${SSH_KEY:-/root/.ssh/nekonet-autoupdate}"
+FLEET_FILE="${FLEET_FILE:-/etc/nekonet-autoupdate/fleet.conf}"
+UPDATE_SPACING_SECONDS="${UPDATE_SPACING_SECONDS:-300}"
+REBOOT_SPACING_SECONDS="${REBOOT_SPACING_SECONDS:-600}"
+SECONDARY_START_DELAY_SECONDS="${SECONDARY_START_DELAY_SECONDS:-900}"
+PEER_RESPONSE_TIMEOUT_SECONDS="${PEER_RESPONSE_TIMEOUT_SECONDS:-45}"
+SERVER_RETURN_TIMEOUT_SECONDS="${SERVER_RETURN_TIMEOUT_SECONDS:-600}"
+
+SSH=(ssh -i "$SSH_KEY" -p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=20 -o ServerAliveCountMax=3)
+
+RUN_DATE="$(date -u +%F)"
+STATE_FILE="$STATE_DIR/$RUN_DATE.state"
+RESULT_FILE="$STATE_DIR/$RUN_DATE.results"
+SUMMARY_FILE="$STATE_DIR/$RUN_DATE.summary"
+
+set_state() { printf '%s\n' "$1" > "$STATE_FILE"; }
+status_for_date() { cat "$STATE_DIR/${1}.state" 2>/dev/null || echo "NOT_STARTED"; }
+
+discord() {
+    local title="$1" description="$2" color="$3"
+    TITLE="$title" DESCRIPTION="${description:0:3900}" COLOR="$color" \
+    python3 - "$DISCORD_WEBHOOK_URL" <<'PY'
+import json, os, sys, urllib.request
+payload=json.dumps({
+  "username":"NekoNet AutoUpdate",
+  "allowed_mentions":{"parse":[]},
+  "embeds":[{"title":os.environ["TITLE"],"description":os.environ["DESCRIPTION"],"color":int(os.environ["COLOR"])}]
+}).encode()
+try:
+    req=urllib.request.Request(sys.argv[1],data=payload,headers={"Content-Type":"application/json"})
+    urllib.request.urlopen(req,timeout=20).read()
+except Exception as exc:
+    print(f"Discord notification failed: {exc}",file=sys.stderr)
+PY
+}
+
+if [[ "${1:-}" == "--status" ]]; then
+    status_for_date "${2:-$RUN_DATE}"
+    exit 0
+fi
+
+exec 9>"$LOCK_FILE"
+flock -n 9 || exit 0
+
+peer_status() {
+    timeout "$PEER_RESPONSE_TIMEOUT_SECONDS" "${SSH[@]}" "${SSH_USER}@${PEER_IP}" \
+      "/usr/local/sbin/nekonet-autoupdate-coordinator --status '$RUN_DATE'" 2>/dev/null
+}
+
+if [[ "$COORDINATOR_ROLE" == "B" ]]; then
+    sleep "$SECONDARY_START_DELAY_SECONDS"
+    pstate="$(peer_status || true)"
+    case "$pstate" in
+        RUNNING|REGULAR_UPDATES_COMPLETE|REGULAR_REBOOTS_COMPLETE|SERVER_B_COMPLETE|COMPLETE)
+            discord "🟦 Server B standing by" "Server A reported \`${pstate}\`. Server B remains ready for failover." "3447003"
+            exit 0
+            ;;
+        FAILED)
+            discord "⛔ Server B takeover blocked" "Server A reported a failed partial run. Manual review is required before retrying." "15158332"
+            exit 1
+            ;;
+        *)
+            discord "⚠️ Server A unavailable" "Server A did not respond with an active/completed state. Server B is taking over this maintenance run." "15105570"
+            ;;
+    esac
+else
+    bstate="$(peer_status || true)"
+    if [[ -n "$bstate" ]]; then
+        discord "🤝 Server B acknowledged" "Server B replied with \`${bstate}\`. Server A is beginning the maintenance run." "3066993"
+    else
+        discord "⚠️ Server B not responding" "Server B did not respond. Server A will continue and report that Server B may be unavailable." "15105570"
+    fi
+fi
+
+run_worker() {
+    local ip="$1"
+    if [[ "$ip" == "$COORDINATOR_IP" ]]; then
+        bash "$WORKER" apply
+    else
+        "${SSH[@]}" "${SSH_USER}@${ip}" "bash -s -- apply" < "$WORKER"
+    fi
+}
+
+update_one() {
+    local name="$1" ip="$2" role="$3"
+    local output rc status packages kernel reboot stage
+
+    discord "🔄 Updating ${name}" "**WireGuard:** \`${ip}\`\n**Role:** ${role}" "3447003"
+
+    set +e
+    output="$(run_worker "$ip" 2>&1)"
+    rc=$?
+    set -e
+
+    status="$(awk -F= '/^STATUS=/{print $2; exit}' <<<"$output")"
+    packages="$(awk -F= '/^PACKAGES=/{print $2; exit}' <<<"$output")"
+    kernel="$(awk -F= '/^KERNEL_UPDATED=/{print $2; exit}' <<<"$output")"
+    reboot="$(awk -F= '/^REBOOT_REQUIRED=/{print $2; exit}' <<<"$output")"
+    stage="$(awk -F= '/^STAGE=/{print $2; exit}' <<<"$output")"
+
+    case "$status" in
+        SUCCESS)
+            printf '%s|%s|%s|%s|%s|UPDATED\n' "$name" "$ip" "${packages:-0}" "${kernel:-No}" "${reboot:-No}" >> "$RESULT_FILE"
+            discord "✅ ${name} updated" "**Packages:** \`${packages:-0}\`\n**Kernel updated:** \`${kernel:-No}\`\n**Reboot required:** \`${reboot:-No}\`" "3066993"
+            ;;
+        CURRENT)
+            printf '%s|%s|0|No|%s|CURRENT\n' "$name" "$ip" "${reboot:-No}" >> "$RESULT_FILE"
+            discord "ℹ️ ${name} already current" "No package update was required.\n**Reboot already required:** \`${reboot:-No}\`" "3447003"
+            ;;
+        *)
+            set_state "FAILED"
+            discord "⛔ Fleet updates stopped" \
+              "**Failed server:** \`${name}\`\n**WireGuard:** \`${ip}\`\n**Stage:** \`${stage:-unknown}\`\n**Exit code:** \`${rc}\`\n\nNo remaining server updates will run. No reboot phase or coordinator update will begin.\n\n\`\`\`\n${output: -1600}\n\`\`\`" \
+              "15158332"
+            return 1
+            ;;
+    esac
+}
+
+wait_online() {
+    local ip="$1"
+    local end=$(( $(date +%s) + SERVER_RETURN_TIMEOUT_SECONDS ))
+    while (( $(date +%s) < end )); do
+        if "${SSH[@]}" "${SSH_USER}@${ip}" "true" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 15
+    done
+    return 1
+}
+
+reboot_one() {
+    local name="$1" ip="$2"
+
+    discord "♻️ Rebooting ${name}" "This server requires a reboot. Remaining reboots are paused until it returns online." "16776960"
+
+    "${SSH[@]}" "${SSH_USER}@${ip}" "shutdown -r +1 'NekoNet AutoUpdate reboot'" >/dev/null
+    sleep 75
+
+    if wait_online "$ip"; then
+        discord "✅ ${name} rebooted" "The server returned online successfully." "3066993"
+        return 0
+    fi
+
+    set_state "FAILED"
+    discord "⛔ Fleet reboots stopped" \
+      "**Server:** \`${name}\`\n**WireGuard:** \`${ip}\`\n\nThe server did not return within ${SERVER_RETURN_TIMEOUT_SECONDS} seconds. No remaining servers or coordinators will reboot or update automatically." \
+      "15158332"
+    return 1
+}
+
+set_state "RUNNING"
+: > "$RESULT_FILE"
+
+discord "🔄 Fleet maintenance started" "**Active coordinator:** \`${COORDINATOR_NAME}\`\n**Role:** \`Server ${COORDINATOR_ROLE}\`" "3447003"
+
+# Phase 1: regular servers only. Stop immediately on first failure.
+while IFS='|' read -r name ip role; do
+    [[ -z "$name" || "$name" == \#* ]] && continue
+    [[ "$ip" == "$SERVER_A_IP" || "$ip" == "$SERVER_B_IP" ]] && continue
+
+    update_one "$name" "$ip" "$role" || exit 1
+    sleep "$UPDATE_SPACING_SECONDS"
+done < "$FLEET_FILE"
+
+set_state "REGULAR_UPDATES_COMPLETE"
+discord "✅ Regular-server updates complete" "All non-coordinator servers successfully updated or were already current. Required reboot processing will now begin." "3066993"
+
+# Phase 2: regular-server reboots only. Stop immediately on first failure to return.
+while IFS='|' read -r name ip packages kernel reboot result; do
+    [[ "$ip" == "$SERVER_A_IP" || "$ip" == "$SERVER_B_IP" ]] && continue
+    [[ "$reboot" == "Yes" ]] || continue
+
+    reboot_one "$name" "$ip" || exit 1
+    sleep "$REBOOT_SPACING_SECONDS"
+done < "$RESULT_FILE"
+
+set_state "REGULAR_REBOOTS_COMPLETE"
+discord "✅ Regular-server maintenance complete" "All regular servers updated successfully and every required reboot returned online. Server B may now update second-last." "3066993"
+
+# Phase 3: Server B updates second-last, only if it has updates.
+role_b="$(awk -F'|' -v ip="$SERVER_B_IP" '$2==ip{print $3}' "$FLEET_FILE")"
+update_one "$SERVER_B_NAME" "$SERVER_B_IP" "${role_b:-Coordinator B}" || exit 1
+
+b_reboot="$(awk -F'|' -v ip="$SERVER_B_IP" '$2==ip{print $5}' "$RESULT_FILE" | tail -1)"
+if [[ "$b_reboot" == "Yes" ]]; then
+    reboot_one "$SERVER_B_NAME" "$SERVER_B_IP" || exit 1
+fi
+
+set_state "SERVER_B_COMPLETE"
+discord "✅ Server B maintenance complete" "Server B updated only if required and completed any required reboot. Server A may now update last." "3066993"
+
+# Phase 4: Server A updates last, only after B completed.
+role_a="$(awk -F'|' -v ip="$SERVER_A_IP" '$2==ip{print $3}' "$FLEET_FILE")"
+update_one "$SERVER_A_NAME" "$SERVER_A_IP" "${role_a:-Coordinator A}" || exit 1
+
+a_reboot="$(awk -F'|' -v ip="$SERVER_A_IP" '$2==ip{print $5}' "$RESULT_FILE" | tail -1)"
+set_state "COMPLETE"
+
+if [[ "$a_reboot" == "Yes" ]]; then
+    discord "♻️ Server A reboot scheduled last" "Every other server and Server B completed successfully. Server A will reboot last." "16776960"
+    shutdown -r +1 "NekoNet AutoUpdate final reboot"
+else
+    discord "✅ Weekly maintenance complete" "All servers completed successfully. Server A did not require a reboot." "3066993"
+fi

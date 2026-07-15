@@ -1,0 +1,13 @@
+[Unit]
+Description=NekoNet A/B fleet update coordinator
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nekonet-autoupdate.env
+ExecStart=/usr/local/sbin/nekonet-autoupdate-coordinator
+TimeoutStartSec=24h
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal

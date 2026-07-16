@@ -1,0 +1,166 @@
+{
+  "servers": [
+    {
+      "id": "princess",
+      "name": "princess.kori.cat",
+      "ip": "10.10.0.2",
+      "role": "webserver + ns1",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "bumblezone",
+      "name": "bumblezone.kori.cat",
+      "ip": "10.10.0.3",
+      "role": "DB backup + ns2",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "nekomail",
+      "name": "nekomail.kori.cat",
+      "ip": "10.10.0.4",
+      "role": "email + ns3",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "aisaka",
+      "name": "aisaka.kori.cat",
+      "ip": "10.10.0.6",
+      "role": "nekobot",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "laika",
+      "name": "laika.kori.cat",
+      "ip": "10.10.0.7",
+      "role": "Coordinator B / backup-gra",
+      "enabled": true,
+      "is_coordinator": true,
+      "metadata": {}
+    },
+    {
+      "id": "falfa",
+      "name": "falfa.kori.cat",
+      "ip": "10.10.0.8",
+      "role": "Coordinator A / backup-bhs",
+      "enabled": true,
+      "is_coordinator": true,
+      "metadata": {}
+    },
+    {
+      "id": "unknown1",
+      "name": "unknown1.kori.cat",
+      "ip": "10.10.0.9",
+      "role": "TBD",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "unknown2",
+      "name": "unknown2.kori.cat",
+      "ip": "10.10.0.10",
+      "role": "TBD",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "unknown3",
+      "name": "unknown3.kori.cat",
+      "ip": "10.10.0.11",
+      "role": "TBD",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "momo",
+      "name": "momo.nekomusic.ca",
+      "ip": "10.10.0.50",
+      "role": "DB primary",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "sylphiette",
+      "name": "sylphiette.nekomusic.ca",
+      "ip": "10.10.0.51",
+      "role": "Master 1",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "yachiru",
+      "name": "yachiru.nekomusic.ca",
+      "ip": "10.10.0.52",
+      "role": "Web-A active",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "yuno",
+      "name": "yuno.nekomusic.ca",
+      "ip": "10.10.0.53",
+      "role": "Slave 1",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "hinata",
+      "name": "hinata.nekomusic.ca",
+      "ip": "10.10.0.54",
+      "role": "Slave 2",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "linia",
+      "name": "linia.nekomusic.ca",
+      "ip": "10.10.0.55",
+      "role": "Master 2",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "roxy",
+      "name": "roxy.nekomusic.ca",
+      "ip": "10.10.0.56",
+      "role": "Web-B standby",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "rokari",
+      "name": "rokari.nekomusic.ca",
+      "ip": "10.10.0.57",
+      "role": "Slave 3",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    },
+    {
+      "id": "minitona",
+      "name": "minitona.nekomusic.ca",
+      "ip": "10.10.0.58",
+      "role": "Slave 4",
+      "enabled": true,
+      "is_coordinator": false,
+      "metadata": {}
+    }
+  ]
+}

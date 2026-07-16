@@ -1,0 +1,19 @@
+servers:
+  - {name: princess.kori.cat, ip: 10.10.0.2, role: "webserver + ns1"}
+  - {name: bumblezone.kori.cat, ip: 10.10.0.3, role: "DB backup + ns2"}
+  - {name: nekomail.kori.cat, ip: 10.10.0.4, role: "email + ns3"}
+  - {name: aisaka.kori.cat, ip: 10.10.0.6, role: "nekobot"}
+  - {name: laika.kori.cat, ip: 10.10.0.7, role: "Coordinator B / backup-gra"}
+  - {name: falfa.kori.cat, ip: 10.10.0.8, role: "Coordinator A / backup-bhs"}
+  - {name: unknown1.kori.cat, ip: 10.10.0.9, role: "TBD"}
+  - {name: unknown2.kori.cat, ip: 10.10.0.10, role: "TBD"}
+  - {name: unknown3.kori.cat, ip: 10.10.0.11, role: "TBD"}
+  - {name: momo.nekomusic.ca, ip: 10.10.0.50, role: "DB primary"}
+  - {name: sylphiette.nekomusic.ca, ip: 10.10.0.51, role: "Master 1"}
+  - {name: yachiru.nekomusic.ca, ip: 10.10.0.52, role: "Web-A active"}
+  - {name: yuno.nekomusic.ca, ip: 10.10.0.53, role: "Slave 1"}
+  - {name: hinata.nekomusic.ca, ip: 10.10.0.54, role: "Slave 2"}
+  - {name: linia.nekomusic.ca, ip: 10.10.0.55, role: "Master 2"}
+  - {name: roxy.nekomusic.ca, ip: 10.10.0.56, role: "Web-B standby"}
+  - {name: rokari.nekomusic.ca, ip: 10.10.0.57, role: "Slave 3"}
+  - {name: minitona.nekomusic.ca, ip: 10.10.0.58, role: "Slave 4"}

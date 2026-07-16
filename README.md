@@ -1,99 +1,37 @@
-# NekoNet AutoUpdate
+# NekoNet AutoUpdate v0.1
 
-Highly controlled weekly update orchestration for an 18-server Ubuntu 24.04 WireGuard mesh.
+High-availability, fail-closed Ubuntu fleet update orchestrator for the NekoNet ecosystem.
 
-## Core safety behavior
+## v0.1 scope
 
-The system is fail-closed.
+- reliable A/B coordination foundation;
+- explicit state machine;
+- shared checkpoint generations and checksums;
+- sequential update/reboot phases;
+- fail-closed transitions;
+- REST API;
+- WebSocket endpoint;
+- Prometheus metrics;
+- Discord notifications;
+- MySQL → PostgreSQL → SQLite → JSON storage selection;
+- local SQLite/JSON mirrors;
+- automated tests.
 
-### Update failure
+## Important
 
-If any regular server fails to update or fails to report a valid result:
+This repository is a strong v0.1 implementation foundation. Remote execution, continuous heartbeat takeover, peer-to-peer synchronous dual-node commit, and full 18-node destructive integration testing still require deployment-specific validation before production use.
 
-- all remaining updates stop immediately;
-- the reboot phase does not start;
-- Server B does not update;
-- Server A does not update;
-- Discord reports the failed server, update stage, and exit status.
+## Documentation
 
-### Reboot failure
+- [Getting Started](docs/getting-started/README.md)
+- [Administrator Guide](docs/administrator/README.md)
+- [Developer Guide](docs/developer/README.md)
+- [Reference](docs/reference/README.md)
 
-After all regular updates succeed, required reboots run one at a time.
+## Dynamic fleet
 
-If any server does not return online within the configured timeout:
+Servers can be added, changed, disabled, or removed through the fleet API or by editing `/etc/nekonet-autoupdate/fleet.json`.
 
-- all remaining reboots stop immediately;
-- Server B and Server A do not update or reboot;
-- Discord reports which server failed to return and that the run was halted.
+## Resilient storage
 
-## Final order
-
-```text
-1. Update all regular servers, 5 minutes apart.
-2. Stop immediately if any update fails.
-3. Reboot only regular servers that require it, 10 minutes apart.
-4. Stop immediately if any rebooted server fails to return.
-5. Update Server B second-last, only if updates exist.
-6. Reboot Server B only if required.
-7. Update Server A last, only after Server B completes.
-8. Reboot Server A last, only if required.
-```
-
-Discord sends a message whenever:
-
-- a server begins updating;
-- a server finishes updating;
-- a server is already current;
-- a server begins rebooting;
-- a server returns after reboot;
-- an update fails and the run stops;
-- a reboot fails and the run stops;
-- Server B is unavailable;
-- Server A is unavailable and Server B takes over;
-- the complete run finishes.
-
-## Coordinator setup
-
-Suggested:
-
-```text
-Server A: falfa.kori.cat — 10.10.0.8
-Server B: laika.kori.cat — 10.10.0.7
-SSH port: 2222
-```
-
-Install this project on both coordinator servers.
-
-```bash
-sudo ./install.sh
-```
-
-On Server A, use the defaults in `sample.env`.
-
-On Server B:
-
-```bash
-COORDINATOR_ROLE="B"
-COORDINATOR_NAME="laika.kori.cat"
-COORDINATOR_IP="10.10.0.7"
-PEER_NAME="falfa.kori.cat"
-PEER_IP="10.10.0.8"
-```
-
-Both coordinators require their SSH public key on every server.
-
-```bash
-ssh-copy-id -i /root/.ssh/nekonet-autoupdate.pub -p 2222 root@10.10.0.2
-```
-
-Enable on both:
-
-```bash
-sudo systemctl enable --now nekonet-autoupdate.timer
-```
-
-## Important limitation
-
-A two-coordinator design can still face an ambiguous network partition where each coordinator can reach targets but not the other coordinator. Per-target locks reduce duplicate work, but a third witness is required for strict split-brain prevention.
-
-Test this on non-critical servers before enabling it across production.
+MySQL or PostgreSQL outages do not stop maintenance when SQLite or JSON remain healthy. Recovered providers are automatically backfilled with the newest committed state.

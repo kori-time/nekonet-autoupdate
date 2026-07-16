@@ -35,3 +35,21 @@ Servers can be added, changed, disabled, or removed through the fleet API or by 
 ## Resilient storage
 
 MySQL or PostgreSQL outages do not stop maintenance when SQLite or JSON remain healthy. Recovered providers are automatically backfilled with the newest committed state.
+
+
+---
+
+## License
+
+NekoNet AutoUpdate is licensed under the Apache License, Version 2.0.
+
+See:
+- LICENSE
+- NOTICE
+- ATTRIBUTION.md
+
+## Support
+
+No official support is provided. Support requests may be declined.
+
+See SUPPORT.md for details.

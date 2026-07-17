@@ -36,20 +36,12 @@ Servers can be added, changed, disabled, or removed through the fleet API or by 
 
 MySQL or PostgreSQL outages do not stop maintenance when SQLite or JSON remain healthy. Recovered providers are automatically backfilled with the newest committed state.
 
+## Automatic fleet installation
 
----
+Install from Server A in the required order—Server A, Server B, then all remaining enabled fleet nodes:
 
-## License
+```bash
+sudo ./deploy-fleet.sh
+```
 
-NekoNet AutoUpdate is licensed under the Apache License, Version 2.0.
-
-See:
-- LICENSE
-- NOTICE
-- ATTRIBUTION.md
-
-## Support
-
-No official support is provided. Support requests may be declined.
-
-See SUPPORT.md for details.
+The deployment stops on the first failed installation or verification. See [Automatic Fleet Installation](docs/getting-started/Fleet-Deployment.md).

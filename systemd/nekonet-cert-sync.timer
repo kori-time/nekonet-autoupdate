@@ -1,0 +1,8 @@
+[Unit]
+Description=Check and synchronize NekoNet certificates daily
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=nekonet-cert-sync.service
+[Install]
+WantedBy=timers.target

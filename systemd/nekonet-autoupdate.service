@@ -1,18 +1,12 @@
 [Unit]
-Description=NekoNet AutoUpdate v0.1 Coordinator
+Description=NekoNet AutoUpdate v0.2 Coordinator
 Wants=network-online.target
 After=network-online.target
-
 [Service]
 Type=simple
 EnvironmentFile=/etc/nekonet-autoupdate.env
 ExecStart=/opt/nekonet-autoupdate/.venv/bin/nekonet-autoupdate
-Restart=on-failure
+Restart=always
 RestartSec=5
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/nekonet-autoupdate
-
 [Install]
 WantedBy=multi-user.target

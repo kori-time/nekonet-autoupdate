@@ -1,0 +1,7 @@
+[Unit]
+Description=Synchronize NekoNet TLS certificates
+After=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nekonet-autoupdate.env
+ExecStart=/usr/local/sbin/nekonet-sync-certificates

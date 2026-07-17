@@ -1,0 +1,10 @@
+[Unit]
+Description=NekoNet AutoUpdate maintenance run
+After=network-online.target nekonet-autoupdate.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nekonet-autoupdate.env
+ExecStart=/opt/nekonet-autoupdate/.venv/bin/nekonet-autoupdate-admin run
+TimeoutStartSec=24h

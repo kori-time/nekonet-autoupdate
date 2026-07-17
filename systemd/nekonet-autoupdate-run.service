@@ -1,10 +1,7 @@
 [Unit]
-Description=NekoNet AutoUpdate maintenance run
-After=network-online.target nekonet-autoupdate.service
-Wants=network-online.target
-
+Description=Start NekoNet maintenance run
+After=nekonet-autoupdate.service
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/nekonet-autoupdate.env
-ExecStart=/opt/nekonet-autoupdate/.venv/bin/nekonet-autoupdate-admin run
-TimeoutStartSec=24h
+ExecStart=/usr/bin/curl -fsS -X POST -H "Authorization: Bearer ${NEKONET_API_TOKEN}" http://${NEKONET_API_BIND}:${NEKONET_API_PORT}/api/v1/runs/start

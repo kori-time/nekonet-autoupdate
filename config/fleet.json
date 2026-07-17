@@ -7,19 +7,7 @@
       "role": "webserver + ns1",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 0,
-      "services": [
-        "nginx"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "bumblezone",
@@ -28,20 +16,7 @@
       "role": "DB backup + ns2",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 10,
-      "services": [
-        "mariadb",
-        "postgresql"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "nekomail",
@@ -50,20 +25,7 @@
       "role": "email + ns3",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 20,
-      "services": [
-        "postfix",
-        "dovecot"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "aisaka",
@@ -72,17 +34,7 @@
       "role": "nekobot",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 30,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "laika",
@@ -91,17 +43,7 @@
       "role": "Coordinator B / backup-gra",
       "enabled": true,
       "is_coordinator": true,
-      "metadata": {},
-      "coordinator_role": "secondary",
-      "canary": false,
-      "order": 40,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "falfa",
@@ -110,17 +52,7 @@
       "role": "Coordinator A / backup-bhs",
       "enabled": true,
       "is_coordinator": true,
-      "metadata": {},
-      "coordinator_role": "primary",
-      "canary": false,
-      "order": 50,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "unknown1",
@@ -129,17 +61,7 @@
       "role": "TBD",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": true,
-      "order": 60,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "unknown2",
@@ -148,17 +70,7 @@
       "role": "TBD",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 70,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "unknown3",
@@ -167,17 +79,7 @@
       "role": "TBD",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 80,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "momo",
@@ -186,20 +88,7 @@
       "role": "DB primary",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 90,
-      "services": [
-        "mariadb",
-        "postgresql"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "sylphiette",
@@ -208,17 +97,7 @@
       "role": "Master 1",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 100,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "yachiru",
@@ -227,19 +106,7 @@
       "role": "Web-A active",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 110,
-      "services": [
-        "nginx"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "yuno",
@@ -248,17 +115,7 @@
       "role": "Slave 1",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 120,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "hinata",
@@ -267,17 +124,7 @@
       "role": "Slave 2",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 130,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "linia",
@@ -286,17 +133,7 @@
       "role": "Master 2",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 140,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "roxy",
@@ -305,21 +142,7 @@
       "role": "Web-B standby",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 150,
-      "services": [
-        "nginx",
-        "mariadb",
-        "postgresql"
-      ],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "rokari",
@@ -328,17 +151,7 @@
       "role": "Slave 3",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 160,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     },
     {
       "id": "minitona",
@@ -347,17 +160,7 @@
       "role": "Slave 4",
       "enabled": true,
       "is_coordinator": false,
-      "metadata": {},
-      "coordinator_role": null,
-      "canary": false,
-      "order": 170,
-      "services": [],
-      "health_checks": [],
-      "update_policy": {
-        "mode": "all",
-        "exclude_packages": [],
-        "max_packages": null
-      }
+      "metadata": {}
     }
   ]
 }

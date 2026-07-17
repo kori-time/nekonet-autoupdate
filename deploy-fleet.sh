@@ -1,79 +1,48 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# NekoNet AutoUpdate fleet deployment script
-#
-# Run this script from Server A.
-#
-# Deployment order:
-#   1. Server A
-#   2. Server B
-#   3. princess.kori.cat
-#   4. All remaining enabled fleet servers
-#
-# The deployment stops immediately if any installation or verification fails.
-
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLEET_FILE="${FLEET_FILE:-$PROJECT_ROOT/config/fleet.json}"
+FLEET_FILE="${FLEET_FILE:-/etc/nekonet-autoupdate/fleet.json}"
 
-BOOTSTRAP_USER="${BOOTSTRAP_USER:-}"
-SSH_KEY="${SSH_KEY:-}"
+BOOTSTRAP_USER="${BOOTSTRAP_USER:-${SUDO_USER:-}}"
+SSH_KEY="${SSH_KEY:-/home/${BOOTSTRAP_USER}/.ssh/id_ed25519}"
 SSH_PORT="${SSH_PORT:-2222}"
 
 SERVER_A_IP="${SERVER_A_IP:-10.10.0.8}"
 SERVER_B_IP="${SERVER_B_IP:-10.10.0.7}"
 PRINCESS_IP="${PRINCESS_IP:-10.10.0.2}"
 
-REMOTE_DIRECTORY="/tmp/nekonet-autoupdate-deploy"
+SKIP_LOCAL_A=false
 
-show_help() {
-    cat <<'EOF'
-Usage:
-  sudo env \
-    BOOTSTRAP_USER="admin-user" \
-    SSH_KEY="/home/admin-user/.ssh/id_ed25519" \
-    SSH_PORT="2222" \
-    ./deploy-fleet.sh
-
-Required environment variables:
-  BOOTSTRAP_USER   Existing sudo-capable account on remote servers
-  SSH_KEY          Private SSH key used for bootstrap deployment
-
-Optional environment variables:
-  SSH_PORT         SSH port. Default: 2222
-  FLEET_FILE       Fleet JSON path
-  SERVER_A_IP      Primary coordinator IP
-  SERVER_B_IP      Secondary coordinator IP
-  PRINCESS_IP      Certificate-source fleet server IP
-EOF
-}
-
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    show_help
-    exit 0
+if [[ "${1:-}" == "--skip-local-a" ]]; then
+    SKIP_LOCAL_A=true
 fi
 
-if [[ $EUID -ne 0 ]]; then
-    echo "Run this deployment script with sudo." >&2
-    exit 1
+if [[ $EUID -ne 0 ||
+    -z "${SUDO_USER:-}" ||
+    "$SUDO_USER" == "root" ]]; then
+
+    echo "Run deploy-fleet.sh with sudo from a named administrator account." >&2
+    exit 100
 fi
 
-if [[ -z "$BOOTSTRAP_USER" ]]; then
-    echo "BOOTSTRAP_USER is required." >&2
-    show_help >&2
-    exit 2
-fi
+[[ -n "$BOOTSTRAP_USER" ]] ||
+    {
+        echo "BOOTSTRAP_USER is required." >&2
+        exit 2
+    }
 
-if [[ -z "$SSH_KEY" || ! -r "$SSH_KEY" ]]; then
-    echo "SSH_KEY must point to a readable private key." >&2
-    show_help >&2
-    exit 2
-fi
+[[ -r "$SSH_KEY" ]] ||
+    {
+        echo "SSH key is not readable: $SSH_KEY" >&2
+        exit 2
+    }
 
-if [[ ! -r "$FLEET_FILE" ]]; then
-    echo "Fleet file not found: $FLEET_FILE" >&2
-    exit 1
-fi
+[[ -r "$FLEET_FILE" ]] ||
+    {
+        echo "Fleet file is missing: $FLEET_FILE" >&2
+        exit 2
+    }
 
 SSH_OPTIONS=(
     -i "$SSH_KEY"
@@ -82,136 +51,113 @@ SSH_OPTIONS=(
     -o ConnectTimeout=15
     -o ServerAliveInterval=10
     -o ServerAliveCountMax=3
-    -o StrictHostKeyChecking=accept-new
+    -o StrictHostKeyChecking=yes
 )
 
 remote_ssh() {
     local ip="$1"
     shift
 
-    ssh         "${SSH_OPTIONS[@]}"         "${BOOTSTRAP_USER}@${ip}"         "$@"
+    ssh \
+        "${SSH_OPTIONS[@]}" \
+        "${BOOTSTRAP_USER}@${ip}" \
+        "$@"
 }
 
 copy_project() {
     local ip="$1"
 
-    echo "Copying project files to ${ip}..."
+    remote_ssh "$ip" \
+        "rm -rf /tmp/nekonet-deploy && mkdir /tmp/nekonet-deploy"
 
-    remote_ssh "$ip"         "rm -rf '$REMOTE_DIRECTORY' && mkdir -p '$REMOTE_DIRECTORY'"
-
-    tar         --exclude='.git'         --exclude='__pycache__'         --exclude='*.pyc'         -C "$PROJECT_ROOT"         -cf -         . |
-        ssh             "${SSH_OPTIONS[@]}"             "${BOOTSTRAP_USER}@${ip}"             "tar -C '$REMOTE_DIRECTORY' -xf -"
+    tar \
+        --exclude=".git" \
+        --exclude="*.pyc" \
+        --exclude="__pycache__" \
+        -C "$PROJECT_ROOT" \
+        -cf - \
+        . |
+        ssh \
+            "${SSH_OPTIONS[@]}" \
+            "${BOOTSTRAP_USER}@${ip}" \
+            "tar -C /tmp/nekonet-deploy -xf -"
 }
 
-install_local_server_a() {
-    echo
-    echo "============================================================"
-    echo "Installing Server A locally: ${SERVER_A_IP}"
-    echo "============================================================"
-
-    "$PROJECT_ROOT/install.sh"         --role A         --enable-service
-
-    systemctl is-active --quiet nekonet-autoupdate.service
-}
-
-install_remote_server() {
+install_remote() {
     local ip="$1"
     local role="$2"
     local certificate_source="$3"
+    local extra_option=""
 
-    echo
-    echo "============================================================"
-    echo "Installing ${ip} as role ${role}"
-    echo "============================================================"
+    echo "Installing $ip as $role..."
 
     copy_project "$ip"
 
-    local cert_option=""
-    if [[ "$certificate_source" == "true" ]]; then
-        cert_option="--cert-source"
+    if [[ "$certificate_source" == true ]]; then
+        extra_option="--cert-source"
     fi
 
-    remote_ssh "$ip"         "cd '$REMOTE_DIRECTORY' &&          sudo ./install.sh --role '$role' $cert_option"
+    remote_ssh "$ip" \
+        "cd /tmp/nekonet-deploy &&
+         sudo ./install.sh
+         --role '$role'
+         $extra_option
+         --non-interactive"
 
-    verify_remote_install "$ip" "$role"
+    remote_ssh "$ip" \
+        "id nekonet >/dev/null &&
+         test -x /usr/local/sbin/nekonet-worker"
 
-    remote_ssh "$ip"         "rm -rf '$REMOTE_DIRECTORY'"
+    remote_ssh "$ip" \
+        "rm -rf /tmp/nekonet-deploy"
 }
 
-verify_remote_install() {
-    local ip="$1"
-    local role="$2"
+if [[ "$SKIP_LOCAL_A" != true ]]; then
+    "$PROJECT_ROOT/install.sh" \
+        --role A \
+        --enable-service \
+        --non-interactive
+fi
 
-    echo "Verifying installation on ${ip}..."
+install_remote "$SERVER_B_IP" "B" "false"
+install_remote "$PRINCESS_IP" "worker" "true"
 
-    remote_ssh "$ip"         "test -x /usr/local/sbin/nekonet-worker"
-
-    remote_ssh "$ip"         "id nekonet >/dev/null"
-
-    remote_ssh "$ip"         "test -r /etc/nekonet-autoupdate/fleet.json"
-
-    if [[ "$role" == "A" || "$role" == "B" ]]; then
-        remote_ssh "$ip"             "systemctl is-enabled nekonet-autoupdate.service >/dev/null"
-    fi
-}
-
-fleet_servers() {
+mapfile -t remaining_servers < <(
     python3 - "$FLEET_FILE" "$SERVER_A_IP" "$SERVER_B_IP" "$PRINCESS_IP" <<'PY'
 import json
 import sys
 
-fleet_path, server_a, server_b, princess = sys.argv[1:]
+fleet_file, server_a, server_b, princess = sys.argv[1:]
 
-with open(fleet_path, encoding="utf-8") as handle:
+with open(fleet_file, encoding="utf-8") as handle:
     fleet = json.load(handle)
 
-servers = []
+servers = sorted(
+    fleet.get("servers", []),
+    key=lambda item: (
+        item.get("order", 100),
+        item.get("name", ""),
+    ),
+)
 
-for entry in fleet.get("servers", []):
-    if not entry.get("enabled", True):
+for server in servers:
+    ip = server.get("ip")
+
+    if not server.get("enabled", True):
         continue
 
-    ip = entry.get("ip")
-
-    if not ip or ip in {server_a, server_b, princess}:
+    if ip in {server_a, server_b, princess}:
         continue
 
-    servers.append(
-        (
-            int(entry.get("order", 100)),
-            entry.get("name", ip),
-            ip,
-        )
-    )
-
-for _, name, ip in sorted(servers):
-    print(f"{name}|{ip}")
+    print(f"{server.get('name', ip)}|{ip}")
 PY
-}
+)
 
-main() {
-    echo "Starting NekoNet AutoUpdate fleet deployment."
-    echo "Fleet file: $FLEET_FILE"
+for entry in "${remaining_servers[@]}"; do
+    IFS="|" read -r name ip <<<"$entry"
 
-    # Step 1: Install the primary coordinator locally.
-    install_local_server_a
+    echo "Deploying $name ($ip)..."
+    install_remote "$ip" "worker" "false"
+done
 
-    # Step 2: Install the secondary coordinator.
-    install_remote_server "$SERVER_B_IP" "B" "false"
-
-    # Step 3: Install Princess as a regular worker and Certbot source.
-    install_remote_server "$PRINCESS_IP" "worker" "true"
-
-    # Step 4: Install all remaining enabled fleet servers.
-    while IFS='|' read -r name ip; do
-        [[ -n "$ip" ]] || continue
-
-        echo "Deploying fleet server: ${name} (${ip})"
-        install_remote_server "$ip" "worker" "false"
-    done < <(fleet_servers)
-
-    echo
-    echo "Fleet deployment completed successfully."
-}
-
-main "$@"
+echo "Fleet deployment completed successfully."

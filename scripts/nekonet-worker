@@ -1,190 +1,27 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-ACTION="${1:-}"
-shift || true
-
-case "$ACTION" in
-  time)
-    python3 -c 'import json,time;print(json.dumps({"epoch":int(time.time())}))'
-    ;;
-
-  update|update-local)
-    mode="${1:-all}"
-    excludes="${2:-}"
-    max_packages="${3:-}"
-    export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
-
-    apt-get -o DPkg::Lock::Timeout=900 update >/tmp/nekonet-apt.log 2>&1
-    simulation="$(apt-get -o DPkg::Lock::Timeout=900 --simulate dist-upgrade)"
-
-    plan="$(python3 -c 'import json,re,sys
-changes=[]
-for line in sys.stdin:
-    m=re.match(r"Inst (\S+)(?: \[(.*?)\])? \((\S+)",line)
-    if m:
-        changes.append({"name":m.group(1),"old_version":m.group(2),"new_version":m.group(3),"action":"upgrade"})
-print(json.dumps(changes))' <<<"$simulation")"
-
-    filtered="$(python3 - "$plan" "$excludes" <<'PY'
-import fnmatch,json,sys
-changes=json.loads(sys.argv[1])
-patterns=[value for value in sys.argv[2].split(",") if value]
-print(json.dumps([
-    change for change in changes
-    if not any(fnmatch.fnmatch(change["name"], pattern) for pattern in patterns)
-]))
-PY
-)"
-    count="$(python3 -c 'import json,sys;print(len(json.loads(sys.argv[1])))' "$filtered")"
-
-    if [[ -n "$max_packages" ]] && (( count > max_packages )); then
-      echo "package count $count exceeds policy maximum $max_packages" >&2
-      exit 44
-    fi
-
-    kernel=false
-    python3 -c 'import json,sys
-raise SystemExit(0 if any(x["name"].startswith(("linux-image","linux-headers","linux-generic","linux-modules","linux-virtual")) for x in json.loads(sys.argv[1])) else 1)' "$filtered" && kernel=true || true
-
-    if [[ "$mode" != "check-only" ]] && (( count > 0 )); then
-      apt-get -o DPkg::Lock::Timeout=900 -y dist-upgrade >>/tmp/nekonet-apt.log 2>&1
-      apt-get -o DPkg::Lock::Timeout=900 -y autoremove >>/tmp/nekonet-apt.log 2>&1
-      apt-get clean
-    fi
-
-    reboot=false
-    reason=""
-    if [[ -f /var/run/reboot-required ]]; then
-      reboot=true
-      reason="system reboot-required"
-    fi
-    if [[ "$kernel" == true ]]; then
-      reboot=true
-      reason="kernel update"
-    fi
-
-    python3 - "$count" "$kernel" "$reboot" "$reason" "$filtered" "$mode" <<'PY'
+A="${1:-}"; shift || true
+json(){ python3 - "$@" <<'PYWORK'
 import json,sys
-print(json.dumps({
-    "packages":int(sys.argv[1]),
-    "kernel_updated":sys.argv[2]=="true",
-    "reboot_required":sys.argv[3]=="true",
-    "reboot_reason":sys.argv[4],
-    "package_changes":json.loads(sys.argv[5]),
-    "mode":sys.argv[6],
-}))
-PY
-    ;;
-
-  reboot|reboot-local)
-    shutdown -r +1 "NekoNet AutoUpdate"
-    echo '{"scheduled":true}'
-    ;;
-
-  health)
-    services="${1:-}"
-    results='[]'
-    failed=0
-    IFS=',' read -ra service_list <<<"$services"
-    for service in "${service_list[@]}"; do
-      [[ -z "$service" ]] && continue
-      if systemctl is-active --quiet "$service"; then
-        healthy=true
-        message=active
-      else
-        healthy=false
-        message=inactive
-        failed=$((failed+1))
-      fi
-      results="$(python3 - "$results" "$service" "$healthy" "$message" <<'PY'
+print(json.dumps(dict(x.split('=',1) for x in sys.argv[1:])))
 import json,sys
-items=json.loads(sys.argv[1])
-items.append({"kind":"systemd","target":sys.argv[2],"healthy":sys.argv[3]=="true","message":sys.argv[4]})
-print(json.dumps(items))
-PY
-)"
-    done
-    failed_units="$(systemctl --failed --no-legend 2>/dev/null | wc -l)"
-    (( failed_units > 0 )) && failed=$((failed+failed_units))
-    python3 - "$failed" "$results" "$failed_units" <<'PY'
-import json,sys
-print(json.dumps({
-    "healthy":int(sys.argv[1])==0,
-    "health_results":json.loads(sys.argv[2]),
-    "failed_units":int(sys.argv[3]),
-}))
-PY
-    ;;
-
-  cert-timer)
-    systemctl is-enabled certbot.timer >/dev/null
-    systemctl is-active certbot.timer >/dev/null
-    echo '{"healthy":true}'
-    ;;
-
-  cert-status)
-    name="${1:?certificate name required}"
-    test -r "/etc/letsencrypt/live/$name/fullchain.pem"
-    python3 - "$name" <<'PY'
-import hashlib,json,subprocess,sys
-path=f"/etc/letsencrypt/live/{sys.argv[1]}/fullchain.pem"
-raw=open(path,"rb").read()
-details=subprocess.check_output(["openssl","x509","-in",path,"-noout","-serial","-enddate"],text=True).splitlines()
-print(json.dumps({
-    "status":"present",
-    "serial":details[0].split("=",1)[1],
-    "expires_at":details[1].split("=",1)[1],
-    "checksum":hashlib.sha256(raw).hexdigest(),
-}))
-PY
-    ;;
-
-  cert-create)
-    name="${1:?}"
-    email="${2:?}"
-    webroot="${3:?}"
-    shift 3
-    args=()
-    for domain in "$@"; do args+=(-d "$domain"); done
-    certbot certonly --webroot -w "$webroot" --non-interactive --agree-tos \
-      --email "$email" --cert-name "$name" "${args[@]}"
-    echo '{"created":true}'
-    ;;
-
-  cert-export)
-    name="${1:?}"
-    tar -C "/etc/letsencrypt/live/$name" -chf - cert.pem chain.pem fullchain.pem privkey.pem
-    ;;
-
-  cert-install)
-    name="${1:?}"
-    stage="/var/lib/nekonet-autoupdate/cert-stage/$name"
-    destination="/etc/nekonet-autoupdate/tls/$name"
-    backup="/var/lib/nekonet-autoupdate/cert-backup/$name"
-    test -r "$stage/fullchain.pem" -a -r "$stage/privkey.pem"
-    cert_hash="$(openssl x509 -in "$stage/fullchain.pem" -pubkey -noout | openssl sha256)"
-    key_hash="$(openssl pkey -in "$stage/privkey.pem" -pubout | openssl sha256)"
-    [[ "$cert_hash" == "$key_hash" ]]
-    openssl x509 -in "$stage/fullchain.pem" -checkend 86400 -noout
-    rm -rf "$backup"
-    [[ -d "$destination" ]] && cp -a "$destination" "$backup" || true
-    install -d -m 750 "$destination"
-    install -m 640 "$stage"/*.pem "$destination"/
-    echo '{"installed":true}'
-    ;;
-
-  cert-rollback)
-    name="${1:?}"
-    destination="/etc/nekonet-autoupdate/tls/$name"
-    backup="/var/lib/nekonet-autoupdate/cert-backup/$name"
-    test -d "$backup"
-    rm -rf "$destination"
-    cp -a "$backup" "$destination"
-    echo '{"rolled_back":true}'
-    ;;
-
-  *)
-    echo "unknown action" >&2
-    exit 2
-    ;;
+print(json.dumps(dict(x.split('=',1) for x in sys.argv[1:])))
+PYWORK
+}
+case "$A" in
+ time) python3 -c 'import json,time;print(json.dumps({"epoch":int(time.time())}))';;
+ update|update-local)
+  export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+  apt-get -o DPkg::Lock::Timeout=900 update >/tmp/nekonet-apt.log 2>&1
+  sim="$(apt-get -o DPkg::Lock::Timeout=900 --simulate dist-upgrade)"; count="$(awk '/^Inst /{c++} END{print c+0}' <<<"$sim")"; kernel=false; grep -Eq '^Inst (linux-image|linux-headers|linux-generic|linux-modules|linux-virtual)' <<<"$sim" && kernel=true
+  if ((count>0));then apt-get -o DPkg::Lock::Timeout=900 -y dist-upgrade >>/tmp/nekonet-apt.log 2>&1; apt-get -o DPkg::Lock::Timeout=900 -y autoremove >>/tmp/nekonet-apt.log 2>&1; apt-get clean;fi
+  reboot=false; [[ -f /var/run/reboot-required ]] && reboot=true; [[ "$kernel" == true ]] && reboot=true
+  python3 -c 'import json,sys;print(json.dumps({"packages":int(sys.argv[1]),"kernel_updated":sys.argv[2]=="true","reboot_required":sys.argv[3]=="true"}))' "$count" "$kernel" "$reboot";;
+ reboot|reboot-local) shutdown -r +1 'NekoNet AutoUpdate'; echo '{"scheduled":true}';;
+ health) bad="$(systemctl --failed --no-legend 2>/dev/null | wc -l)"; python3 -c 'import json,sys;print(json.dumps({"healthy":int(sys.argv[1])==0,"failed_units":int(sys.argv[1])}))' "$bad";;
+ cert-status) name="${1:?}"; test -r "/etc/letsencrypt/live/$name/fullchain.pem"; openssl x509 -in "/etc/letsencrypt/live/$name/fullchain.pem" -noout -serial -enddate | python3 -c 'import sys,json; print(json.dumps({"status":"present","details":sys.stdin.read()}))';;
+ cert-create) name="${1:?}"; email="${2:?}"; webroot="${3:?}"; shift 3; args=(); for d in "$@";do args+=(-d "$d");done; certbot certonly --webroot -w "$webroot" --non-interactive --agree-tos --email "$email" --cert-name "$name" "${args[@]}"; echo '{"created":true}';;
+ cert-export) name="${1:?}"; tar -C "/etc/letsencrypt/live/$name" -chf - cert.pem chain.pem fullchain.pem privkey.pem;;
+ cert-install) name="${1:?}"; stage="/var/lib/nekonet-autoupdate/cert-stage/$name"; dest="/etc/nekonet-autoupdate/tls/$name"; test -r "$stage/fullchain.pem" -a -r "$stage/privkey.pem"; ch="$(openssl x509 -in "$stage/fullchain.pem" -pubkey -noout|openssl sha256)"; kh="$(openssl pkey -in "$stage/privkey.pem" -pubout|openssl sha256)"; [[ "$ch" == "$kh" ]]; install -d -m 750 "$dest"; install -m 640 "$stage"/*.pem "$dest"/; echo '{"installed":true}';;
+ *) echo "unknown action" >&2; exit 2;;
 esac
